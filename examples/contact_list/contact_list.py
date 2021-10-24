@@ -21,7 +21,9 @@
 # The following code is an example that build a GTK contact-list with liblarch
 # If you have some basic PyGTK experience, the code should be straightforward.
 
-from gi.repository import Gtk, GObject
+import gi
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gtk, Gdk, GObject, Graphene
 import cairo
 import sys
 
@@ -147,32 +149,34 @@ class NodeTeam(TreeNode):
 
 class ContactListWindow(object):
 
-    def __init__(self):
+    def __init__(self, application):
         # First we do all the GTK stuff
         # This is not interesting from a liblarch perspective
-        self.window = Gtk.Window()
+        self.window = Gtk.ApplicationWindow(application=application)
         self.window.set_size_request(300, 600)
-        self.window.set_border_width(12)
         self.window.set_title('Liblarch contact-list')
-        self.window.connect('destroy', self.quit)
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.window.connect('close-request', self.quit)
+        vbox = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            margin_start=12, margin_end=12, margin_top=12, margin_bottom=12
+        )
         vbox.set_spacing(6)
         # A check button to show/hide offline contacts
-        show_offline = Gtk.CheckButton("Show offline contacts")
+        show_offline = Gtk.CheckButton(label="Show offline contacts")
         show_offline.connect("toggled", self.show_offline_contacts)
-        vbox.pack_start(show_offline, expand=False, fill=True, padding=0)
+        vbox.append(show_offline)
         # The search through contacts
         search = Gtk.Entry()
-        search.set_icon_from_icon_name(0, "search")
+        search.set_icon_from_icon_name(0, "system-search-symbolic")
         search.get_buffer().connect("inserted-text", self.search)
         search.get_buffer().connect("deleted-text", self.search)
-        vbox.pack_start(search, expand=False, fill=True, padding=0)
+        vbox.append(search)
         # The contact list, build with liblarch
-        scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.add_with_viewport(self.make_contact_list())
+        scrolled_window = Gtk.ScrolledWindow(vexpand=True)
+        scrolled_window.set_child(self.make_contact_list())
         scrolled_window.set_policy(
             Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        vbox.pack_start(scrolled_window, True, True, 0)
+        vbox.append(scrolled_window)
         # Status
         box = Gtk.ComboBoxText()
         box.append_text("Online")
@@ -180,13 +184,11 @@ class ContactListWindow(object):
         box.append_text("Offline")
         box.set_active(0)
         box.connect('changed', self.status_changed)
-        vbox.pack_start(box, expand=False, fill=True, padding=0)
-        self.window.add(vbox)
-        self.window.show_all()
+        vbox.append(box)
+        self.window.set_child(vbox)
 
     # This is the interesting part on how we use liblarch
     def make_contact_list(self):
-
         # LIBLARCH TREE CONSTRUCTION
         # First thing, we create a liblarch tree
         self.tree = Tree()
@@ -323,7 +325,7 @@ class ContactListWindow(object):
             return False
 
     def quit(self, widget):
-        Gtk.main_quit()
+        self.window.props.application.quit()
 
 
 class CellRendererTags(Gtk.CellRenderer):
@@ -335,7 +337,7 @@ class CellRendererTags(Gtk.CellRenderer):
     __gproperties__ = {
         'status': (
             GObject.TYPE_PYOBJECT, "Status",
-            "Status", GObject.PARAM_READWRITE,
+            "Status", GObject.ParamFlags.READWRITE,
         ),
     }
 
@@ -358,12 +360,14 @@ class CellRendererTags(Gtk.CellRenderer):
         else:
             return getattr(self, pspec.name)
 
-    def do_render(self, cr, widget, background_area, cell_area, flags):
+    def do_snapshot(self, snapshot, widget, background_area, cell_area, flags):
+        area_rect = Graphene.Rect.alloc().init(cell_area.x, cell_area.y, cell_area.width, cell_area.height)
+        cr = snapshot.append_cairo(area_rect)
         cr.set_antialias(cairo.ANTIALIAS_NONE)
         # Coordinates of the origin point
         y_align = self.get_property("yalign")
-        rect_x = cell_area.x
-        rect_y = cell_area.y + int((cell_area.height - 16) * y_align)
+        rect_x = area_rect.get_x()
+        rect_y = area_rect.get_y() + int(area_rect.get_height() * y_align)
         colours = {
             "online": (0.059, 0.867, 0.157),
             "busy": (0.910, 0.067, 0.063),
@@ -374,25 +378,23 @@ class CellRendererTags(Gtk.CellRenderer):
             # Draw circle
             radius = 7
             cr.set_source_rgb(*color)
-            cr.arc(rect_x, rect_y + 8, radius, 90, 180)
+            cr.arc(rect_x + radius, rect_y, radius, 90, 180)
             cr.fill()
 
             # Outer line
             cr.set_source_rgba(0, 0, 0, 0.20)
             cr.set_line_width(1.0)
-            cr.arc(rect_x, rect_y + 8, radius, 90, 180)
+            cr.arc(rect_x + radius, rect_y, radius, 90, 180)
             cr.stroke()
 
-    def do_get_size(self, widget, cell_area=None):
+    def do_get_preferred_width(self, widget):
         if self.status:
             return (
-                self.xpad,
-                self.ypad,
                 self.xpad * 2 + 16 + 2 * self.PADDING,
-                self.ypad * 2 + 16,
+                self.xpad * 2 + 16 + 2 * self.PADDING
             )
         else:
-            return (0, 0, 0, 0)
+            return (0, 0)
 
 
 GObject.type_register(CellRendererTags)
@@ -400,5 +402,10 @@ GObject.type_register(CellRendererTags)
 
 if __name__ == "__main__":
     # We launch the GTK main_loop
-    ContactListWindow()
-    Gtk.main()
+    def on_activate(app):
+        win = ContactListWindow(app)
+        win.window.show()
+
+    app = Gtk.Application(application_id="org.gnome.GTG.LiblarchDemo")
+    app.connect("activate", on_activate)
+    app.run(None)

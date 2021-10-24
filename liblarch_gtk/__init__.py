@@ -18,7 +18,7 @@
 # -----------------------------------------------------------------------------
 
 import gi  # noqa
-gi.require_version("Gtk", "3.0")  # noqa
+gi.require_version("Gtk", "4.0")  # noqa
 from gi.repository import Gtk, Gdk
 from gi.repository import GObject
 
@@ -43,8 +43,11 @@ def brightness(color_str):
     global BRITGHTNESS_CACHE
 
     if color_str not in BRITGHTNESS_CACHE:
-        c = Gdk.color_parse(color_str)
-        brightness = (0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue) / 65535.0
+        c = Gdk.RGBA()
+        c.parse(color_str)
+        brightness = (0.2126 * c.red * 255
+                    + 0.7152 * c.green * 255
+                    + 0.0722 * c.blue * 255) / 65535.0
         BRITGHTNESS_CACHE[color_str] = brightness
     return BRITGHTNESS_CACHE[color_str]
 
@@ -102,6 +105,7 @@ class TreeView(Gtk.TreeView):
         self.sort_order = Gtk.SortType.ASCENDING
         self.bg_color_column = None
         self.separator_func = None
+        self.is_dark = False
 
         self.dnd_internal_target = ''
         self.dnd_external_targets = {}
@@ -323,6 +327,12 @@ class TreeView(Gtk.TreeView):
         col_num, col = self.columns[col_name]
         col.set_resizable(resizable)
 
+    def set_is_dark(self, is_dark):
+        """ Set if the system is currently dark. This affects
+        rendering of cells to best match the contrast of the environment
+        """
+        self.is_dark = is_dark
+
     def set_bg_color(self, color_func, color_column):
         """ Set which column and function for generating background color
 
@@ -333,10 +343,10 @@ class TreeView(Gtk.TreeView):
             """ Set default color to the function.
 
             Transform function from func(node, default_color) into func(node).
-            Default color is computed based on some GTK style magic. """
-            style = column.get_tree_view().get_style_context()
-            color = style.get_background_color(Gtk.StateFlags.NORMAL)
-            default = color.to_color()
+            Default color is computed based on the expected color,
+            GTK doesn't provide a way to get arbitrary CSS-full values anymore. """
+            default = Gdk.RGBA()
+            default.parse("#000000")
             return lambda node: func(node, default)
 
         if color_column in self.columns:
@@ -381,7 +391,9 @@ class TreeView(Gtk.TreeView):
 
         if isinstance(cell, Gtk.CellRendererText):
             if color is not None and brightness(color) < 0.5:
-                cell.set_property("foreground", '#FFFFFF')
+                cell.set_property(
+                    "foreground", '#FFFFFF' if self.is_dark else "#000000"
+                )
             else:
                 # Otherwise unset foreground color
                 cell.set_property("foreground-set", False)

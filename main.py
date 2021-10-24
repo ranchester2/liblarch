@@ -233,22 +233,21 @@ class LiblarchDemo(object):
                 self.mod_counter, mean)
         self.window.set_title('Liblarch demo: %s nodes' % count)
 
-    def __init__(self):
-        self.window = Gtk.Window()
-        self.window.set_size_request(640, 480)
-        self.window.set_position(Gtk.WindowPosition.CENTER)
-        self.window.set_border_width(10)
+    def __init__(self, app):
+        self.window = Gtk.ApplicationWindow(application=app)
+        self.window.set_default_size(640, 480)
         self.window.set_title('Liblarch demo')
         self.window.connect('destroy', self.finish)
 
         self.liblarch_widget = self._build_tree_view()
-        scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.add_with_viewport(self.liblarch_widget)
+        scrolled_window = Gtk.ScrolledWindow(vexpand=True)
+        scrolled_window.set_child(self.liblarch_widget)
 
         self.start_time = 0
 
         # Buttons
         action_panel = Gtk.Box()
+        action_panel.set_homogeneous(True)
         action_panel.set_spacing(5)
 
         button_desc = [
@@ -263,15 +262,16 @@ class LiblarchDemo(object):
         for name, callback in button_desc:
             button = Gtk.Button.new_with_mnemonic(name)
             button.connect('clicked', callback)
-            action_panel.pack_start(button, True, True, 0)
+            action_panel.append(button)
 
         filter_panel = Gtk.Box()
+        filter_panel.set_homogeneous(True)
         filter_panel.set_spacing(5)
 
         for name in self.tree.list_filters():
-            button = Gtk.ToggleButton("%s filter" % name)
+            button = Gtk.ToggleButton(label="%s filter" % name)
             button.connect('toggled', self.apply_filter, name)
-            filter_panel.pack_start(button, True, True, 0)
+            filter_panel.append(button)
 
         # Use cases
         usecases_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -293,33 +293,35 @@ class LiblarchDemo(object):
         for name, callback in button_desc:
             if usecase_order <= 0:
                 if usecase_box is not None:
-                    usecases_vbox.pack_start(
-                        usecase_box, expand=False, fill=True, padding=0)
+                    usecases_vbox.append(usecase_box)
                 usecase_box = Gtk.Box()
+                usecase_box.set_homogeneous(True)
                 usecase_box.set_spacing(5)
 
             button = Gtk.Button.new_with_mnemonic(name)
             button.connect('clicked', callback)
-            usecase_box.pack_start(button, True, True, 0)
+            usecase_box.append(button)
 
             usecase_order = (usecase_order + 1) % usecase_order_max
 
-        usecases_vbox.pack_start(
-            usecase_box, expand=False, fill=True, padding=0)
+        usecases_vbox.append(usecase_box)
         usecase_panel = Gtk.Expander()
         usecase_panel.set_label('Use cases')
         usecase_panel.set_expanded(True)
-        usecase_panel.add(usecases_vbox)
+        usecase_panel.set_child(usecases_vbox)
 
         # Show it
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        vbox.pack_start(action_panel, False, True, 10)
-        vbox.pack_start(filter_panel, False, True, 10)
-        vbox.pack_start(scrolled_window, True, True, 0)
-        vbox.pack_start(usecase_panel, False, True, 10)
+        vbox = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            margin_start=10, margin_end=10, margin_top=10, margin_bottom=10,
+            spacing=10
+        )
+        vbox.append(action_panel)
+        vbox.append(filter_panel)
+        vbox.append(scrolled_window)
+        vbox.append(usecase_panel)
 
-        self.window.add(vbox)
-        self.window.show_all()
+        self.window.set_child(vbox)
 
         self.should_finish = threading.Event()
 
@@ -525,16 +527,18 @@ class LiblarchDemo(object):
 
     def load_from_file(self, widget):
         dialog = Gtk.FileChooserDialog(
-            "Open..",
-            self.window,
-            Gtk.FileChooserAction.OPEN,
-            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-             Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
+            title="Open..",
+            transient_for=self.window,
+            action=Gtk.FileChooserAction.OPEN)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Open", Gtk.ResponseType.OK)
         dialog.set_default_response(Gtk.ResponseType.OK)
+        dialog.connect("response", self.on_load_from_file_response)
+        dialog.present()
 
-        response = dialog.run()
+    def on_load_from_file_response(self, dialog, response):
         if response == Gtk.ResponseType.OK:
-            file_name = dialog.get_filename()
+            file_name = dialog.get_file().get_path()
         else:
             file_name = None
         dialog.destroy()
@@ -591,15 +595,18 @@ class LiblarchDemo(object):
 
     def finish(self, widget):
         self.should_finish.set()
-        Gtk.main_quit()
+        self.window.props.application.quit()
 
     def run(self):
-        Gtk.main()
+        self.window.present()
 
 
 if __name__ == "__main__":
-    GObject.threads_init()
-    app = LiblarchDemo()
+    def on_activate(app):
+        lapp = LiblarchDemo(app)
+        lapp.run()
+    app = Gtk.Application(application_id="org.gnome.Liblarch.Demo")
+    app.connect("activate", on_activate)
     app.run()
 
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
