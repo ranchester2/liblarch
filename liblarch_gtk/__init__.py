@@ -406,6 +406,7 @@ class TreeView(Gtk.TreeView):
         """ Sets Drag'n'Drop name and initialize Drag'n'Drop support
 
         If ENABLE_SORTING, drag_drop signal must be handled by this widget."""
+        return
         self.dnd_internal_target = dndname
         self.__init_dnd()
         self.connect('drag_data_get', self.on_drag_data_get)
@@ -413,6 +414,7 @@ class TreeView(Gtk.TreeView):
 
     def set_dnd_external(self, sourcename, func):
         """ Add a new external target and initialize Drag'n'Drop support"""
+        return
         i = 1
         while i in self.dnd_external_targets:
             i += 1
@@ -434,6 +436,7 @@ class TreeView(Gtk.TreeView):
         drag_dest_set()). To know difference, look in PyGTK FAQ:
         http://faq.pyGtk.org/index.py?file=faq13.033.htp&req=show
         """
+        return
         self.defer_select = False
 
         if self.dnd_internal_target == '':
@@ -461,6 +464,7 @@ class TreeView(Gtk.TreeView):
         Serialize iterators of selected tasks in format
         <iter>, <iter>, ..., <iter> and set it as parameter of DND """
 
+        return
         treeselection = treeview.get_selection()
         model, paths = treeselection.get_selected_rows()
         iters = [model.get_iter(path) for path in paths]
@@ -488,6 +492,7 @@ class TreeView(Gtk.TreeView):
         # 0 : no drag-n-drop at all
         # 1 : drag-n-drop move the node
         # 2 : drag-n-drop copy the node
+        return
 
         model = treeview.get_model()
         drop_info = treeview.get_dest_row_at_pos(x, y)
